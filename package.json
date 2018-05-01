@@ -1,0 +1,12 @@
+{
+  "name": "cloudwatch-ts-shenannies",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "Ronald Hong <ronniejhong@gmail.com>",
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "ts-node": "^6.0.2",
+    "typescript": "^2.8.3"
+  }
+}
