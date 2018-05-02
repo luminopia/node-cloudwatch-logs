@@ -1,10 +1,10 @@
 import {
   createCanonicalRequest, 
   createRequestAuthorization,
-  canonicalRequestHash, 
-  requestSignable, 
+  createCanonicalRequestHash, 
+  createRequestSignable, 
   createRequestSignature,
-  signingKeyHmac,
+  createSigningKeyHmac,
 } from './'
 
 const tests = []
@@ -61,7 +61,7 @@ const testCanonicalRequestHash = () => {
     },
     payload: '',
   })
-  const actual = canonicalRequestHash(canonicalRequest)
+  const actual = createCanonicalRequestHash(canonicalRequest)
 
   if (expected !== actual) {
     console.warn('canonicalRequestHash test failed')
@@ -92,7 +92,7 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59`
     },
     payload: '',
   })
-  const actual = requestSignable({canonicalRequest, requestDateTime: '20150830T123600Z', region: 'us-east-1', service: 'iam'})
+  const actual = createRequestSignable({canonicalRequest, requestDateTime: '20150830T123600Z', region: 'us-east-1', service: 'iam'})
 
   if (expected !== actual) {
     console.warn('requestSignable test failed')
@@ -106,7 +106,7 @@ tests.push(testRequestSignable)
 
 const testSigningKey = () => {
   const expected = 'c4afb1cc5771d871763a393e44b703571b55cc28424d1a5e86da6ed3c154a4b9'
-  const actual = signingKeyHmac({
+  const actual = createSigningKeyHmac({
     secretAccessKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
     requestDate: '20150830',
     region: 'us-east-1',
@@ -125,7 +125,7 @@ tests.push(testSigningKey)
 
 const testCreateRequestSignature = () => {
   const expected = '5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7'
-  const canonicalRequest = createCanonicalRequest({
+  const actual = createRequestSignature({
     method: 'GET',
     uri: '/',
     query: {
@@ -138,9 +138,6 @@ const testCreateRequestSignature = () => {
       'X-Amz-Date': '20150830T123600Z',
     },
     payload: '',
-  })
-  const actual = createRequestSignature({
-    canonicalRequest,
     requestDateTime: '20150830T123600Z',
     region: 'us-east-1',
     service: 'iam',

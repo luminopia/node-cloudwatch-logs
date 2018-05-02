@@ -93,7 +93,7 @@ const hashRequestPayload = (payload: string) => {
     .digest('hex')
 }
 
-export const canonicalRequestHash = (canonicalRequest: string) => createHash(hashAlgorithm).update(canonicalRequest).digest('hex')
+export const createCanonicalRequestHash = (canonicalRequest: string) => createHash(hashAlgorithm).update(canonicalRequest).digest('hex')
 
 const requestScope = ({
   requestDate,
@@ -111,7 +111,7 @@ const requestScope = ({
  * https://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
  * @param canonicalRequest
  */
-export const requestSignable = ({
+export const createRequestSignable = ({
   canonicalRequest,
   requestDateTime,
   region,
@@ -127,7 +127,7 @@ export const requestSignable = ({
     region,
     service,
   })
-  const requestHash = canonicalRequestHash(canonicalRequest)
+  const requestHash = createCanonicalRequestHash(canonicalRequest)
 
   return [
     algorithm,
@@ -142,7 +142,7 @@ export const requestSignable = ({
  */
 const extractRequestDate = (requestDateTime: string) => requestDateTime.slice(0, 8)
 
-export const signingKeyHmac = ({
+export const createSigningKeyHmac = ({
   secretAccessKey,
   /** YYYYMMDD */
   requestDate,
@@ -165,32 +165,47 @@ export const signingKeyHmac = ({
  * https://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
  */
 export const createRequestSignature = ({
-  canonicalRequest,
+  method,
+  uri,
+  query,
+  headers,
+  payload,
   requestDateTime,
   region,
   service,
   secretAccessKey,
 }: {
-  canonicalRequest: string,
+  method: string,
+  uri: string,
+  query: {[queryKey: string]: string},
+  headers: RequestHeaders,
+  payload: string,
   requestDateTime: string,
   region: string,
   service: string,
   secretAccessKey: string,
 }) => {
+  const canonicalRequest = createCanonicalRequest({
+    method,
+    uri,
+    query,
+    headers,
+    payload,
+  })
   const requestDate = extractRequestDate(requestDateTime)
-  const requestSigningKey = signingKeyHmac({
+  const requestSigningKey = createSigningKeyHmac({
     secretAccessKey,
     requestDate,
     region,
     service,
   }).digest()
-  const signable = requestSignable({canonicalRequest, requestDateTime, region, service})
+  const signable = createRequestSignable({canonicalRequest, requestDateTime, region, service})
   const signature = createHmac(hashAlgorithm, requestSigningKey).update(signable).digest('hex')
   return signature
 }
 
 /**
- * THIS IS THE BIG KAHUNA
+ * Create an Authorization header value for AWS API v4 requests.
  * https://docs.aws.amazon.com/general/latest/gr/sigv4-add-signature-to-request.html
  */
 export const createRequestAuthorization = ({
@@ -215,9 +230,11 @@ export const createRequestAuthorization = ({
    */
   query,
   /**
-   * At a minimum, you must include the host header
+   * Request headers.
+   * Must include the `host` header.
    */
   headers,
+  /** Request payload */
   payload,
   /** ISO8601 basic format: YYYYMMDD'T'HHMMSS'Z' */
   requestDateTime,
@@ -225,7 +242,9 @@ export const createRequestAuthorization = ({
   region,
   /** AWS service requested, e.g. iam */
   service,
+  /** AWS user credentials access key id */
   accessKeyId,
+  /** AWS user credentials secret access key */
   secretAccessKey,
 }: {
   method: string,
@@ -241,24 +260,19 @@ export const createRequestAuthorization = ({
 }) => {
   const requestDate = extractRequestDate(requestDateTime)
 
-  const canonicalRequest = createCanonicalRequest({
+  const requestCredential = `${accessKeyId}/${requestScope({requestDate, region, service})}`
+  const signedHeaders = createSignedHeaders(headers)
+  const signature = createRequestSignature({
     method,
     uri,
     query,
     headers,
     payload,
-  })
-  const requestHash = canonicalRequestHash(canonicalRequest)
-
-  const requestCredential = `${accessKeyId}/${requestScope({requestDate, region, service})}`
-  const signedHeaders = createSignedHeaders(headers)
-
-  const signature = createRequestSignature({
-    canonicalRequest,
     requestDateTime,
     region,
     service,
     secretAccessKey,
   })
+
   return `${algorithm} Credential=${requestCredential}, SignedHeaders=${signedHeaders}, Signature=${signature}`
 }
