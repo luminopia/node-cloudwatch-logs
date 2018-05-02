@@ -5,7 +5,7 @@ import {
   createRequestSignable, 
   createRequestSignature,
   createSigningKeyHmac,
-} from './'
+} from './auth'
 
 const tests = []
 
