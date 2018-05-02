@@ -1,4 +1,11 @@
-import {createCanonicalRequest, canonicalRequestHash, requestSignable, signingKey} from './'
+import {
+  createCanonicalRequest, 
+  createRequestAuthorization,
+  canonicalRequestHash, 
+  requestSignable, 
+  createRequestSignature,
+  signingKeyHmac,
+} from './'
 
 const tests = []
 
@@ -99,12 +106,12 @@ tests.push(testRequestSignable)
 
 const testSigningKey = () => {
   const expected = 'c4afb1cc5771d871763a393e44b703571b55cc28424d1a5e86da6ed3c154a4b9'
-  const actual = signingKey({
+  const actual = signingKeyHmac({
     secretAccessKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
     requestDate: '20150830',
     region: 'us-east-1',
     service: 'iam',
-  })
+  }).digest('hex')
 
   if (expected !== actual) {
     console.warn('signingKey test failed')
@@ -115,6 +122,73 @@ const testSigningKey = () => {
   }
 }
 tests.push(testSigningKey)
+
+const testCreateRequestSignature = () => {
+  const expected = '5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7'
+  const canonicalRequest = createCanonicalRequest({
+    method: 'GET',
+    uri: '/',
+    query: {
+      Action: 'ListUsers',
+      Version: '2010-05-08',
+    },
+    headers: {
+      host: 'iam.amazonaws.com',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
+      'X-Amz-Date': '20150830T123600Z',
+    },
+    payload: '',
+  })
+  const actual = createRequestSignature({
+    canonicalRequest,
+    requestDateTime: '20150830T123600Z',
+    region: 'us-east-1',
+    service: 'iam',
+    secretAccessKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+  })
+
+  if (expected !== actual) {
+    console.warn('createRequestSignature test failed')
+    console.warn('Expected:\n'); console.warn(expected)
+    console.warn('\nActual:\n'); console.warn(actual)
+  } else {
+    console.log('createRequestSignature test successful!')
+  } 
+}
+tests.push(testCreateRequestSignature)
+
+const testCreateRequestAuthorization = () => {
+  const accessKeyId = 'AKIDEXAMPLE'
+  const expected = 'AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, SignedHeaders=content-type;host;x-amz-date, Signature=5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7'
+  const actual = createRequestAuthorization({
+    method: 'GET',
+    uri: '/',
+    query: {
+      Action: 'ListUsers',
+      Version: '2010-05-08',
+    },
+    headers: {
+      host: 'iam.amazonaws.com',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
+      'X-Amz-Date': '20150830T123600Z',
+    },
+    payload: '', 
+    requestDateTime: '20150830T123600Z',
+    region: 'us-east-1',
+    service: 'iam',
+    accessKeyId,
+    secretAccessKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+  })
+
+  if (expected !== actual) {
+    console.warn('createRequestAuthorization test failed')
+    console.warn('Expected:\n'); console.warn(expected)
+    console.warn('\nActual:\n'); console.warn(actual)
+  } else {
+    console.log('createRequestAuthorization test successful!')
+  } 
+}
+tests.push(testCreateRequestAuthorization)
 
 // Run da tests
 tests.forEach((t) => t())

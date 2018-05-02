@@ -1,7 +1,20 @@
-import {createHash, createHmac} from 'crypto'
+import {createHash, createHmac, createSign} from 'crypto'
 
 // Code based on AWS doc:
 // https://docs.aws.amazon.com/general/latest/gr/sigv4_signing.html
+
+type RequestHeaders = {[headerKey: string]: string | string[]} & {host: string}
+const algorithm = 'AWS4-HMAC-SHA256'
+const hashAlgorithm = 'sha256'
+
+const createSignedHeaders = (headers: RequestHeaders) => (
+  Object.keys(headers)
+    .map(formatHeaderKey)
+    .sort()
+    .join(';')
+)
+const formatHeaderKey = (k: string) => k.toLowerCase()
+const formatHeaderValue = (v: string) => v.trim().replace(/\s+/g, ' ')
 
 /**
  * https://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html
@@ -37,15 +50,13 @@ export const createCanonicalRequest = ({
   method: string,
   uri: string,
   query: {[queryKey: string]: string},
-  headers: {[headerKey: string]: string | string[]} & {host: string},
+  headers: RequestHeaders,
   payload: string,
 }) => {
   const canonicalQueryString = Object.keys(query).sort()
     .reduce((queryParams: string[], queryKey) => [...queryParams, `${queryKey}=${query[queryKey]}`], [])
     .join('&')
 
-  const formatHeaderKey = (k: string) => k.toLowerCase()
-  const formatHeaderValue = (v: string) => v.trim().replace(/\s+/g, ' ')
   const caseInsensitiveSort = (a: string, b: string) => a.toLowerCase().localeCompare(b.toLowerCase())
 
   const canonicalHeaders = Object.keys(headers).sort(caseInsensitiveSort)
@@ -62,10 +73,7 @@ export const createCanonicalRequest = ({
     }, [])
     .join('\n') + '\n' // Add trailing \n
 
-  const signedHeaders = Object.keys(headers)
-    .map(formatHeaderKey)
-    .sort()
-    .join(';')
+  const signedHeaders = createSignedHeaders(headers)
 
   const hashedPayload = hashRequestPayload(payload)
 
@@ -80,16 +88,28 @@ export const createCanonicalRequest = ({
 }
 
 const hashRequestPayload = (payload: string) => {
-  return createHash('sha256')
+  return createHash(hashAlgorithm)
     .update(payload)
     .digest('hex')
 }
 
-export const canonicalRequestHash = (canonicalRequest: string) => createHash('sha256').update(canonicalRequest).digest('hex')
+export const canonicalRequestHash = (canonicalRequest: string) => createHash(hashAlgorithm).update(canonicalRequest).digest('hex')
+
+const requestScope = ({
+  requestDate,
+  region,
+  service,
+}: {
+  requestDate: string,
+  region: string,
+  service: string,
+}) => {
+  return `${requestDate}/${region}/${service}/aws4_request`
+}
 
 /**
  * https://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
- * @param canonicalRequest Hashed with SHA256
+ * @param canonicalRequest
  */
 export const requestSignable = ({
   canonicalRequest,
@@ -102,9 +122,11 @@ export const requestSignable = ({
   region: string,
   service: string,
 }) => {
-  // For SHA256, AWS4-HMAC-SHA256 is the algorithm
-  const algorithm = 'AWS4-HMAC-SHA256' 
-  const credentialScope = `${extractRequestDate(requestDateTime)}/${region}/${service}/aws4_request`
+  const credentialScope = requestScope({
+    requestDate: extractRequestDate(requestDateTime),
+    region,
+    service,
+  })
   const requestHash = canonicalRequestHash(canonicalRequest)
 
   return [
@@ -120,10 +142,58 @@ export const requestSignable = ({
  */
 const extractRequestDate = (requestDateTime: string) => requestDateTime.slice(0, 8)
 
+export const signingKeyHmac = ({
+  secretAccessKey,
+  /** YYYYMMDD */
+  requestDate,
+  region,
+  service,
+}: {
+  secretAccessKey: string,
+  requestDate: string,
+  region: string,
+  service: string,
+}) => {
+  const kDate = createHmac(hashAlgorithm, 'AWS4' + secretAccessKey).update(requestDate)
+  const kRegion = createHmac(hashAlgorithm, kDate.digest()).update(region)
+  const kService = createHmac(hashAlgorithm, kRegion.digest()).update(service)
+  const kSigning = createHmac(hashAlgorithm, kService.digest()).update('aws4_request')
+  return kSigning
+}
+
 /**
  * https://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
  */
 export const createRequestSignature = ({
+  canonicalRequest,
+  requestDateTime,
+  region,
+  service,
+  secretAccessKey,
+}: {
+  canonicalRequest: string,
+  requestDateTime: string,
+  region: string,
+  service: string,
+  secretAccessKey: string,
+}) => {
+  const requestDate = extractRequestDate(requestDateTime)
+  const requestSigningKey = signingKeyHmac({
+    secretAccessKey,
+    requestDate,
+    region,
+    service,
+  }).digest()
+  const signable = requestSignable({canonicalRequest, requestDateTime, region, service})
+  const signature = createHmac(hashAlgorithm, requestSigningKey).update(signable).digest('hex')
+  return signature
+}
+
+/**
+ * THIS IS THE BIG KAHUNA
+ * https://docs.aws.amazon.com/general/latest/gr/sigv4-add-signature-to-request.html
+ */
+export const createRequestAuthorization = ({
   /** Uppercase format (e.g. GET, POST) */
   method,
   /**
@@ -155,6 +225,7 @@ export const createRequestSignature = ({
   region,
   /** AWS service requested, e.g. iam */
   service,
+  accessKeyId,
   secretAccessKey,
 }: {
   method: string,
@@ -165,27 +236,29 @@ export const createRequestSignature = ({
   requestDateTime: string,
   region: string,
   service: string,
+  accessKeyId: string,
   secretAccessKey: string,
 }) => {
+  const requestDate = extractRequestDate(requestDateTime)
 
-}
+  const canonicalRequest = createCanonicalRequest({
+    method,
+    uri,
+    query,
+    headers,
+    payload,
+  })
+  const requestHash = canonicalRequestHash(canonicalRequest)
 
-export const signingKey = ({
-  secretAccessKey,
-  /** YYYYMMDD */
-  requestDate,
-  region,
-  service,
-}: {
-  secretAccessKey: string,
-  requestDate: string,
-  region: string,
-  service: string,
-}) => {
-  const algorithm = 'sha256'
-  const kDate = createHmac(algorithm, 'AWS4' + secretAccessKey).update(requestDate)
-  const kRegion = createHmac(algorithm, kDate.digest()).update(region)
-  const kService = createHmac(algorithm, kRegion.digest()).update(service)
-  const kSigning = createHmac(algorithm, kService.digest()).update('aws4_request')
-  return kSigning.digest('hex')
+  const requestCredential = `${accessKeyId}/${requestScope({requestDate, region, service})}`
+  const signedHeaders = createSignedHeaders(headers)
+
+  const signature = createRequestSignature({
+    canonicalRequest,
+    requestDateTime,
+    region,
+    service,
+    secretAccessKey,
+  })
+  return `${algorithm} Credential=${requestCredential}, SignedHeaders=${signedHeaders}, Signature=${signature}`
 }
