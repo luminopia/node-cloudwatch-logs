@@ -7,7 +7,7 @@ import {createHash} from 'crypto'
  * https://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html
  * @param param0 
  */
-const canonicalRequest = ({
+export const createCanonicalRequest = ({
   /** Uppercase format (e.g. GET, POST) */
   method,
   /**
@@ -62,8 +62,9 @@ const canonicalRequest = ({
     }, [])
     .join('\n') + '\n' // Add trailing \n
 
-  const signedHeaders = Object.keys(headers).sort()
+  const signedHeaders = Object.keys(headers)
     .map(formatHeaderKey)
+    .sort()
     .join(';')
 
   const hashedPayload = hashRequestPayload(payload)
@@ -84,32 +85,32 @@ const hashRequestPayload = (payload: string) => {
     .digest('hex')
 }
 
-const expected = `
-GET
-/
-Action=ListUsers&Version=2010-05-08
-content-type:application/x-www-form-urlencoded; charset=utf-8
-host:iam.amazonaws.com
-x-amz-date:20150830T123600Z
+export const canonicalRequestHash = (canonicalRequest: string) => createHash('sha256').update(canonicalRequest).digest('hex')
 
-content-type;host;x-amz-date
-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-`
+/**
+ * https://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
+ * @param canonicalRequest Hashed with SHA256
+ */
+export const requestSignature = ({
+  canonicalRequest,
+  requestDateTime,
+  region,
+  service,
+}: {
+  canonicalRequest: string,
+  requestDateTime: string,
+  region: string,
+  service: string,
+}) => {
+  // For SHA256, AWS4-HMAC-SHA256 is the algorithm
+  const algorithm = 'AWS4-HMAC-SHA256' 
+  const credentialScope = `${requestDateTime.slice(0, 8)}/${region}/${service}/aws4_request`
+  const requestHash = canonicalRequestHash(canonicalRequest)
 
-const actual = canonicalRequest({
-  method: 'GET',
-  uri: '/',
-  query: {
-    Action: 'ListUsers',
-    Version: '2010-05-08',
-  },
-  headers: {
-    host: 'iam.amazonaws.com',
-    'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
-    'X-Amz-Date': '20150830T123600Z',
-  },
-  payload: '',
-})
-
-console.log('Expected:'); console.log(expected)
-console.log('Actual:'); console.log(actual)
+  return [
+    algorithm,
+    requestDateTime,
+    credentialScope,
+    requestHash,
+  ].join('\n')
+}
