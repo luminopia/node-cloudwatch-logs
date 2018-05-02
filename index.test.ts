@@ -1,4 +1,4 @@
-import {createCanonicalRequest, canonicalRequestHash, requestSignature} from './'
+import {createCanonicalRequest, canonicalRequestHash, requestSignable, signingKey} from './'
 
 const tests = []
 
@@ -29,9 +29,9 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
   })
   
   if (expected !== actual) {
-    console.log('createCanonicalRequest test failed')
-    console.log('Expected:\n'); console.log(expected)
-    console.log('\nActual:\n'); console.log(actual)
+    console.warn('createCanonicalRequest test failed')
+    console.warn('Expected:\n'); console.warn(expected)
+    console.warn('\nActual:\n'); console.warn(actual)
   } else {
     console.log('createCanonicalRequest test successful!')
   }
@@ -57,16 +57,16 @@ const testCanonicalRequestHash = () => {
   const actual = canonicalRequestHash(canonicalRequest)
 
   if (expected !== actual) {
-    console.log('canonicalRequestHash test failed')
-    console.log('Expected:\n'); console.log(expected)
-    console.log('\nActual:\n'); console.log(actual)
+    console.warn('canonicalRequestHash test failed')
+    console.warn('Expected:\n'); console.warn(expected)
+    console.warn('\nActual:\n'); console.warn(actual)
   } else {
     console.log('canonicalRequestHash test successful!')
   }
 }
 tests.push(testCanonicalRequestHash)
 
-const testRequestSignature = () => {
+const testRequestSignable = () => {
   const expected = `AWS4-HMAC-SHA256
 20150830T123600Z
 20150830/us-east-1/iam/aws4_request
@@ -85,17 +85,36 @@ f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59`
     },
     payload: '',
   })
-  const actual = requestSignature({canonicalRequest, requestDateTime: '20150830T123600Z', region: 'us-east-1', service: 'iam'})
+  const actual = requestSignable({canonicalRequest, requestDateTime: '20150830T123600Z', region: 'us-east-1', service: 'iam'})
 
   if (expected !== actual) {
-    console.log('requestSignature test failed')
-    console.log('Expected:\n'); console.log(expected)
-    console.log('\nActual:\n'); console.log(actual)
+    console.warn('requestSignable test failed')
+    console.warn('Expected:\n'); console.warn(expected)
+    console.warn('\nActual:\n'); console.warn(actual)
   } else {
-    console.log('requestSignature test successful!')
+    console.log('requestSignable test successful!')
   }
 }
-tests.push(testRequestSignature)
+tests.push(testRequestSignable)
+
+const testSigningKey = () => {
+  const expected = 'c4afb1cc5771d871763a393e44b703571b55cc28424d1a5e86da6ed3c154a4b9'
+  const actual = signingKey({
+    secretAccessKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+    requestDate: '20150830',
+    region: 'us-east-1',
+    service: 'iam',
+  })
+
+  if (expected !== actual) {
+    console.warn('signingKey test failed')
+    console.warn('Expected:\n'); console.warn(expected)
+    console.warn('\nActual:\n'); console.warn(actual)
+  } else {
+    console.log('signingKey test successful!')
+  }
+}
+tests.push(testSigningKey)
 
 // Run da tests
 tests.forEach((t) => t())
