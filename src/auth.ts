@@ -1,12 +1,28 @@
+/**
+ * Code based on AWS doc:
+ * https://docs.aws.amazon.com/general/latest/gr/sigv4_signing.html
+ * 
+ * AWS requests require a special Authorization header which includes a request signature.
+ */
+
 import {createHash, createHmac, createSign} from 'crypto'
 
-// Code based on AWS doc:
-// https://docs.aws.amazon.com/general/latest/gr/sigv4_signing.html
-
-type RequestHeaders = {[headerKey: string]: string | string[]} & {host: string}
 const algorithm = 'AWS4-HMAC-SHA256'
 const hashAlgorithm = 'sha256'
 
+
+type RequestHeaders = {[headerKey: string]: string | string[]} 
+  // The host header must be included as a signed header
+  & {host: string}
+
+/**
+ * The list of headers that you included in the canonical headers. 
+ * By adding this list of headers, you tell AWS which headers in the request are part of the signing process and which 
+ * ones AWS can ignore (for example, any additional headers added by a proxy) for purposes of validating the request.
+ * 
+ * To create the signed headers list, convert all header names to lowercase, sort them by character code, and use 
+ * a semicolon to separate the header names. 
+ */
 const createSignedHeaders = (headers: RequestHeaders) => (
   Object.keys(headers)
     .map(formatHeaderKey)
@@ -17,32 +33,14 @@ const formatHeaderKey = (k: string) => k.toLowerCase()
 const formatHeaderValue = (v: string) => v.trim().replace(/\s+/g, ' ')
 
 /**
+ * Create a string that includes information from your request in a standardized (canonical) format.
+ * Must be in the specific format to ensure the signature calculated by the client matches the one calculated by AWS.
  * https://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html
  */
 export const createCanonicalRequest = ({
-  /** Uppercase format (e.g. GET, POST) */
   method,
-  /**
-   * The canonical URI is the URI-encoded version of the absolute path component of the URI, 
-   * which is everything in the URI from the HTTP host to the question mark character ("?") that begins the query 
-   * string parameters (if any).
-   * 
-   * Normalize URI paths according to RFC 3986. Remove redundant and relative path components. 
-   * Each path segment must be URI-encoded.
-   */
   uri,
-  /**
-   * Keys and values are expected to be URI-encoded with the following rules:
-   * - Do not URI-encode any of the unreserved characters that RFC 3986 defines: 
-   *   A-Z, a-z, 0-9, hyphen ( - ), underscore ( _ ), period ( . ), and tilde ( ~ ).
-   * - Percent-encode all other characters with %XY, where X and Y are hexadecimal characters (0-9 and uppercase A-F). 
-   *   For example, the space character must be encoded as %20 (not using '+', as some encoding schemes do) and 
-   *   extended UTF-8 characters must be in the form %XY%ZA%BC.
-   */
   query,
-  /**
-   * At a minimum, you must include the host header
-   */
   headers,
   payload,
 }: {
@@ -107,8 +105,8 @@ const requestScope = ({
 }
 
 /**
+ * The string that is signed by the signing key to create the request signature.
  * https://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
- * @param canonicalRequest
  */
 export const createRequestSignable = ({
   canonicalRequest,
@@ -137,10 +135,14 @@ export const createRequestSignable = ({
 }
 
 /**
- * @param requestDateTime ISO8601 basic format: YYYYMMDD'T'HHMMSS'Z'
+ * Extracts a request date in format YYYYMMDD from an ISO8601 basic-formatted datetime.
+ * @param requestDateTime Must be ISO8601 basic format: YYYYMMDD'T'HHMMSS'Z'
  */
 const extractRequestDate = (requestDateTime: string) => requestDateTime.slice(0, 8)
 
+/**
+ * Creates an Hmac instance of a signing key to be used to sign the request.
+ */
 export const createSigningKeyHmac = ({
   secretAccessKey,
   /** YYYYMMDD */
@@ -161,6 +163,7 @@ export const createSigningKeyHmac = ({
 }
 
 /**
+ * Creates a request signature to be used as part of the AWS Authorization header.
  * https://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
  */
 export const createRequestSignature = ({
@@ -215,12 +218,15 @@ export const createRequestAuthorization = ({
    * which is everything in the URI from the HTTP host to the question mark character ("?") that begins the query 
    * string parameters (if any).
    * 
-   * Normalize URI paths according to RFC 3986. Remove redundant and relative path components. 
-   * Each path segment must be URI-encoded.
+   * WARNING: The following requirements are not implemented by the method.
+   * - Normalize URI paths according to RFC 3986. Remove redundant and relative path components. 
+   * - Each path segment must be URI-encoded.
    */
   uri,
   /**
-   * Keys and values are expected to be URI-encoded with the following rules:
+   * Query parameters to be constructed into a query string.
+   * 
+   * WARNING: Keys and values are expected to be URI-encoded with the following rules:
    * - Do not URI-encode any of the unreserved characters that RFC 3986 defines: 
    *   A-Z, a-z, 0-9, hyphen ( - ), underscore ( _ ), period ( . ), and tilde ( ~ ).
    * - Percent-encode all other characters with %XY, where X and Y are hexadecimal characters (0-9 and uppercase A-F). 
@@ -239,7 +245,7 @@ export const createRequestAuthorization = ({
   requestDateTime,
   /** AWS region, e.g. us-east-2 */
   region,
-  /** AWS service requested, e.g. iam */
+  /** AWS service requested, e.g. `iam`, `logs` */
   service,
   /** AWS user credentials access key id */
   accessKeyId,
