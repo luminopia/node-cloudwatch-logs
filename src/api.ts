@@ -176,6 +176,7 @@ export const putLogEvents = ({
   const host = HOST_BY_REGION[region]
   const path = '/'
   const method = 'POST'
+  // TODO: Make sure that logEvents are sorted by timestamp
   const json = JSON.stringify(payload)
 
   const signedHeaders = {

@@ -1,5 +1,5 @@
 {
-  "name": "cloudwatch-ts-shenannies",
+  "name": "ts-cloudwatch-logs",
   "version": "1.0.0",
   "main": "index.js",
   "author": "Ronald Hong <ronniejhong@gmail.com>",

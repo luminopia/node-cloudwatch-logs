@@ -18,7 +18,6 @@ const formatHeaderValue = (v: string) => v.trim().replace(/\s+/g, ' ')
 
 /**
  * https://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html
- * @param param0 
  */
 export const createCanonicalRequest = ({
   /** Uppercase format (e.g. GET, POST) */
